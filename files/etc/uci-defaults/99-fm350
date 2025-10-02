@@ -1,0 +1,20 @@
+#!/bin/sh
+# FM350-GL UCI Defaults Setup
+# Runs once on first boot
+
+# Enable service
+/etc/init.d/fm350-manager enable
+
+# Create network interface if not exists
+if ! uci get network.wwan >/dev/null 2>&1; then
+  uci set network.wwan=interface
+  uci set network.wwan.proto='fm350'
+  uci set network.wwan.apn='internet'
+  uci set network.wwan.metric='50'
+  uci commit network
+fi
+
+# Remove this script after execution
+rm -f /etc/uci-defaults/99-fm350
+
+exit 0

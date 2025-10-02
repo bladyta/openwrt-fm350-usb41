@@ -1,0 +1,62 @@
+# OpenWrt Build Artifacts
+build-output/
+bin/
+*.tar.xz
+*.tar.gz
+*.img
+*.img.gz
+*.bin
+
+# Image Builder
+openwrt-imagebuilder-*/
+imagebuilder-*/
+
+# Full Buildroot
+openwrt/
+build_dir/
+staging_dir/
+tmp/
+logs/
+dl/
+feeds/
+
+# Config
+.config.old
+*~
+
+# Runtime
+*.lock
+*.pid
+*.log
+
+# Temporary Files
+*.swp
+*.swo
+*.orig
+*.rej
+.*.un~
+
+# OS Files
+.DS_Store
+Thumbs.db
+*.bak
+
+# IDE / Editors
+.vscode/
+.idea/
+*.sublime-*
+.project
+.cproject
+.settings/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Logs and Stamps
+/tmp/
+*.stamp
+logstamp/

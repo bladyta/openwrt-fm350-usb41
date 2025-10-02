@@ -1,0 +1,68 @@
+CONFIG_TARGET_x86=y
+CONFIG_TARGET_x86_64=y
+CONFIG_TARGET_x86_64_DEVICE_generic=y
+
+# USB Support
+CONFIG_PACKAGE_kmod-usb-core=y
+CONFIG_PACKAGE_kmod-usb2=y
+CONFIG_PACKAGE_kmod-usb3=y
+CONFIG_PACKAGE_kmod-usb-serial=y
+CONFIG_PACKAGE_kmod-usb-serial-wwan=y
+CONFIG_PACKAGE_kmod-usb-serial-option=y
+CONFIG_PACKAGE_kmod-usb-net=y
+CONFIG_PACKAGE_kmod-usb-net-rndis=y
+
+# Networking
+CONFIG_PACKAGE_ip-full=y
+CONFIG_PACKAGE_dnsmasq=y
+CONFIG_PACKAGE_ca-bundle=y
+CONFIG_PACKAGE_ca-certificates=y
+
+# Utilities
+CONFIG_PACKAGE_coreutils-timeout=y
+CONFIG_PACKAGE_ethtool=y
+CONFIG_PACKAGE_tcpdump=y
+CONFIG_PACKAGE_iperf3=y
+CONFIG_PACKAGE_mtr=y
+CONFIG_PACKAGE_traceroute=y
+CONFIG_PACKAGE_curl=y
+CONFIG_PACKAGE_wget-ssl=y
+CONFIG_PACKAGE_bind-dig=y
+CONFIG_PACKAGE_socat=y
+CONFIG_PACKAGE_picocom=y
+CONFIG_PACKAGE_comgt=y
+CONFIG_PACKAGE_usbutils=y
+CONFIG_PACKAGE_pciutils=y
+CONFIG_PACKAGE_htop=y
+CONFIG_PACKAGE_nano=y
+CONFIG_PACKAGE_vim=y
+CONFIG_PACKAGE_jq=y
+CONFIG_PACKAGE_less=y
+CONFIG_PACKAGE_screen=y
+CONFIG_PACKAGE_minicom=y
+CONFIG_PACKAGE_atinout=y
+CONFIG_PACKAGE_lsof=y
+CONFIG_PACKAGE_mc=y
+
+# LuCI
+CONFIG_PACKAGE_luci=y
+CONFIG_PACKAGE_luci-ssl=y
+CONFIG_PACKAGE_luci-app-firewall=y
+CONFIG_PACKAGE_luci-i18n-base-pl=y
+CONFIG_PACKAGE_luci-i18n-firewall-pl=y
+CONFIG_PACKAGE_uhttpd=y
+CONFIG_PACKAGE_uhttpd-mod-ubus=y
+
+# Firewall
+CONFIG_PACKAGE_firewall4=y
+CONFIG_PACKAGE_nftables=y
+
+# Forbidden packages (MUST NOT BE INCLUDED)
+# CONFIG_PACKAGE_modemmanager is not set
+# CONFIG_PACKAGE_libmbim is not set
+# CONFIG_PACKAGE_libqmi is not set
+# CONFIG_PACKAGE_umbim is not set
+# CONFIG_PACKAGE_uqmi is not set
+# CONFIG_PACKAGE_kmod-usb-net-cdc-mbim is not set
+# CONFIG_PACKAGE_kmod-usb-net-cdc-ncm is not set
+# CONFIG_PACKAGE_kmod-usb-net-cdc-ether is not set

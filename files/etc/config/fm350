@@ -1,0 +1,8 @@
+config globals 'global'
+	option apn 'internet'
+	option metric '50'
+	option dns1 '8.8.8.8'
+	option dns2 '8.8.4.4'
+	option ipv6_enable '0'
+	option recovery_max '3'
+	option recovery_cooldown '1800'

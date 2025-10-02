@@ -1,0 +1,46 @@
+#!/bin/sh
+# FM350-GL USB ID Registration Hotplug Script
+# POSIX/ash compliant
+
+. /usr/lib/fm350/functions.sh
+
+# Filter: only bind/add actions for FM350
+[ "$ACTION" = "add" ] || [ "$ACTION" = "bind" ] || exit 0
+
+# Match FM350 VID:PID (0e8d:7127/7126/7125)
+echo "$PRODUCT" | grep -qE '^e8d/(7127|7126|7125)/' || exit 0
+
+# Rate limiting
+STAMP_FILE="/tmp/fm350-hotplug-usbids.stamp"
+mkdir -p /tmp
+
+if [ -f "$STAMP_FILE" ]; then
+  LAST=$(cat "$STAMP_FILE" 2>/dev/null)
+  NOW=$(date +%s)
+  
+  if [ -n "$LAST" ] && [ $((NOW - LAST)) -lt 60 ]; then
+    exit 0
+  fi
+fi
+
+date +%s > "$STAMP_FILE"
+
+# Register USB IDs
+log_limited info "Hotplug: Registering FM350 USB IDs (action=$ACTION, product=$PRODUCT)"
+
+NEW_ID_OPTION="/sys/bus/usb-serial/drivers/option1/new_id"
+NEW_ID_GENERIC="/sys/bus/usb-serial/drivers/generic/new_id"
+
+if [ -f "$NEW_ID_OPTION" ]; then
+  echo "0e8d 7127 ff" > "$NEW_ID_OPTION" 2>/dev/null || true
+  echo "0e8d 7126 ff" > "$NEW_ID_OPTION" 2>/dev/null || true
+  echo "0e8d 7125 ff" > "$NEW_ID_OPTION" 2>/dev/null || true
+  log_limited info "USB IDs registered to option driver"
+elif [ -f "$NEW_ID_GENERIC" ]; then
+  echo "0e8d 7127" > "$NEW_ID_GENERIC" 2>/dev/null || true
+  echo "0e8d 7126" > "$NEW_ID_GENERIC" 2>/dev/null || true
+  echo "0e8d 7125" > "$NEW_ID_GENERIC" 2>/dev/null || true
+  log_limited info "USB IDs registered to generic driver"
+fi
+
+exit 0
