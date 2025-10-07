@@ -1,7 +1,7 @@
 #!/bin/sh
 # FM350-GL Local Image Builder Script
 # POSIX compliant
-# v22.1
+# v22.1-FIXED
 
 set -eu
 
@@ -42,7 +42,7 @@ die() {
 # MAIN
 ################################################################################
 
-log "FM350-GL Image Builder v22.1"
+log "FM350-GL Image Builder v22.1-FIXED"
 log "OpenWrt: $OPENWRT_VERSION"
 log "Target: $BOARD/$SUBTARGET"
 log "Profile: $PROFILE"
