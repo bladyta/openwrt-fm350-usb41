@@ -2,6 +2,7 @@
 # FM350-GL One-Click Builder
 # Supports: curl | sh deployment
 # POSIX compliant
+# v22.1
 
 set -eu
 
@@ -17,7 +18,7 @@ PROFILE="${PROFILE:-generic}"
 REPO_URL="${REPO_URL:-}"
 EXTRA_PKGS="${EXTRA_PKGS:-}"
 
-BUILD_MODE="imagebuilder"  # or "full"
+BUILD_MODE="imagebuilder"
 
 ################################################################################
 # PACKAGE LISTS
@@ -44,7 +45,6 @@ die() {
   exit 1
 }
 
-# Detect package manager - MUST USE RETURN
 pm_detect() {
   if command -v apt-get >/dev/null 2>&1; then
     echo "apt"
@@ -67,7 +67,6 @@ pm_detect() {
   fi
 }
 
-# Install dependencies
 install_deps() {
   local pm
   pm=$(pm_detect)
@@ -145,7 +144,6 @@ install_deps() {
   log "Dependencies installed successfully"
 }
 
-# Clone repository if needed
 clone_repo() {
   if [ -z "$REPO_URL" ]; then
     log "REPO_URL not set, assuming repository already exists"
@@ -163,7 +161,6 @@ clone_repo() {
   fi
 }
 
-# Build with Image Builder
 build_imagebuilder() {
   log "Building with OpenWrt Image Builder..."
   
@@ -174,13 +171,11 @@ build_imagebuilder() {
   mkdir -p build-output
   cd build-output
   
-  # Download IB
   if [ ! -f "$IB_FILE" ]; then
     log "Downloading Image Builder..."
     wget -q --show-progress "$IB_URL" || die "Failed to download Image Builder"
   fi
   
-  # Extract IB
   if [ ! -d "$IB_DIR" ]; then
     log "Extracting Image Builder..."
     tar -Jxf "$IB_FILE" || die "Failed to extract Image Builder"
@@ -188,12 +183,10 @@ build_imagebuilder() {
   
   cd "$IB_DIR"
   
-  # Copy files
   log "Copying overlay files..."
   rm -rf files
   cp -r ../../files . || die "Failed to copy files"
   
-  # Make scripts executable
   chmod +x files/usr/sbin/fm350-manager
   chmod +x files/usr/lib/fm350/functions.sh
   chmod +x files/lib/netifd/proto/fm350.sh
@@ -202,7 +195,6 @@ build_imagebuilder() {
   chmod +x files/etc/uci-defaults/99-fm350
   chmod +x files/scripts/*.sh
   
-  # Build
   log "Building image with packages: $PACKAGES_ALL"
   
   make image \
@@ -218,14 +210,12 @@ build_imagebuilder() {
   ls -lh "bin/targets/$BOARD/$SUBTARGET/"/*.tar.gz 2>/dev/null || true
 }
 
-# Build with full buildroot
 build_full() {
   log "Building with full OpenWrt buildroot..."
   
   mkdir -p build-output
   cd build-output
   
-  # Clone OpenWrt
   if [ ! -d "openwrt" ]; then
     log "Cloning OpenWrt repository..."
     git clone https://git.openwrt.org/openwrt/openwrt.git || die "Failed to clone OpenWrt"
@@ -236,31 +226,23 @@ build_full() {
     cd openwrt
   fi
   
-  # Update feeds
   log "Updating feeds..."
   ./scripts/feeds update -a
   ./scripts/feeds install -a
   
-  # Copy config
-  if [ -f "../../configs/defconfig" ]; then
-    log "Copying defconfig..."
-    cp ../../configs/defconfig .config
-  elif [ -f "../../.config" ]; then
+  if [ -f "../../.config" ]; then
     log "Copying .config..."
     cp ../../.config .config
   else
-    die "No config file found"
+    die "No .config file found"
   fi
   
-  # Expand config
   make defconfig
   
-  # Copy files
   log "Copying overlay files..."
   rm -rf files
   cp -r ../../files . || die "Failed to copy files"
   
-  # Make scripts executable
   chmod +x files/usr/sbin/fm350-manager
   chmod +x files/usr/lib/fm350/functions.sh
   chmod +x files/lib/netifd/proto/fm350.sh
@@ -269,7 +251,6 @@ build_full() {
   chmod +x files/etc/uci-defaults/99-fm350
   chmod +x files/scripts/*.sh
   
-  # Build
   log "Building (this may take a while)..."
   make -j$(($(nproc) + 1)) download world || die "Build failed"
   
@@ -284,11 +265,10 @@ build_full() {
 ################################################################################
 
 log "=========================================="
-log "FM350-GL One-Click Builder v21.1-ULTIMATE"
+log "FM350-GL One-Click Builder v22.1"
 log "=========================================="
 echo
 
-# Parse arguments
 while [ $# -gt 0 ]; do
   case "$1" in
     --full)
@@ -308,16 +288,13 @@ log "Profile: $PROFILE"
 [ -n "$EXTRA_PKGS" ] && log "Extra packages: $EXTRA_PKGS"
 echo
 
-# Check if running via curl | sh
 if [ ! -f "files/usr/sbin/fm350-manager" ]; then
   log "Repository not found, cloning..."
   clone_repo
 fi
 
-# Install dependencies
 install_deps
 
-# Build
 case "$BUILD_MODE" in
   imagebuilder)
     build_imagebuilder
