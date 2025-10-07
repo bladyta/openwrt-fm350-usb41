@@ -1,28 +1,28 @@
 #!/bin/sh
 # FM350-GL System Validation Script
 # POSIX/ash compliant
-# VERSION: 21.1-ULTIMATE (All optimizations applied)
+# VERSION: 22.1 (Master Prompt validated)
 
 set -e
 
 echo "=========================================="
-echo "FM350-GL System Validation"
+echo "FM350-GL System Validation v22.1"
 echo "=========================================="
 echo
 
 FAIL_COUNT=0
 
 fail() {
-  echo "❌ FAIL: $1"
+  echo "✗ FAIL: $1"
   FAIL_COUNT=$((FAIL_COUNT + 1))
 }
 
 pass() {
-  echo "✅ PASS: $1"
+  echo "✓ PASS: $1"
 }
 
 info() {
-  echo "ℹ️  INFO: $1"
+  echo "ℹ INFO: $1"
 }
 
 echo "=== Required Commands ==="
@@ -50,7 +50,6 @@ echo "=== Kernel Modules ==="
 REQUIRED_MODULES="option rndis_host"
 
 for mod in $REQUIRED_MODULES; do
-  # Use awk for exact match (more reliable than grep -w with ^)
   if lsmod 2>/dev/null | awk '$1 == "'"$mod"'" { found=1; exit } END { exit !found }'; then
     pass "Module loaded: $mod"
   elif ls /etc/modules.d/*-$mod 2>/dev/null | grep -q .; then
@@ -105,13 +104,12 @@ for dev in /sys/bus/usb/devices/*; do
         pass "FM350-GL detected (VID:PID = 0e8d:$PRODUCT)"
         FM350_FOUND=1
         
-        # Check USB speed
         if [ -f "$dev/speed" ]; then
           SPEED=$(cat "$dev/speed" 2>/dev/null)
           info "USB speed: $SPEED Mb/s"
           
           if [ "$SPEED" = "5000" ]; then
-            echo "⚠️  WARNING: USB3 detected - consider using USB2 port for stability"
+            echo "⚠ WARNING: USB3 detected - consider using USB2 port for stability"
           fi
         fi
         ;;
@@ -179,7 +177,6 @@ echo
 
 echo "=== Security Checks ==="
 if [ -d /tmp/fm350 ]; then
-  # Normalize stat output (remove leading zeros for cross-platform compatibility)
   PERMS=$(stat -c '%a' /tmp/fm350 2>/dev/null || stat -f '%A' /tmp/fm350 2>/dev/null)
   PERMS=$(echo "$PERMS" | sed 's/^0*//')
   
@@ -193,13 +190,13 @@ echo
 
 echo "=========================================="
 if [ $FAIL_COUNT -eq 0 ]; then
-  echo "✅ VALIDATION PASSED"
+  echo "✓ VALIDATION PASSED"
   echo
   echo "System is ready for FM350-GL operation."
   echo "To start the service: /etc/init.d/fm350-manager start"
   exit 0
 else
-  echo "❌ VALIDATION FAILED ($FAIL_COUNT issue(s))"
+  echo "✗ VALIDATION FAILED ($FAIL_COUNT issue(s))"
   echo
   echo "Please resolve the issues above before using FM350-GL."
   exit 1
