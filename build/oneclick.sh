@@ -2,7 +2,7 @@
 # FM350-GL One-Click Builder
 # Supports: curl | sh deployment
 # POSIX compliant
-# v22.1
+# v22.1-FIXED
 
 set -eu
 
@@ -79,9 +79,10 @@ install_deps() {
       sudo apt-get update
       
       if [ "$BUILD_MODE" = "full" ]; then
+        # FIXED: Removed python3-distutils, added python3-setuptools
         sudo apt-get install -y build-essential clang flex bison g++ gawk \
           gcc-multilib gettext git libncurses-dev libssl-dev \
-          python3-distutils rsync unzip zlib1g-dev file wget curl
+          python3 python3-setuptools rsync unzip zlib1g-dev file wget curl
       else
         sudo apt-get install -y wget curl tar gzip rsync make git
       fi
@@ -213,8 +214,12 @@ build_imagebuilder() {
 build_full() {
   log "Building with full OpenWrt buildroot..."
   
-  mkdir -p build-output
-  cd build-output
+  # Get script directory
+  SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
+  REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
+  
+  mkdir -p "$REPO_ROOT/build-output"
+  cd "$REPO_ROOT/build-output"
   
   if [ ! -d "openwrt" ]; then
     log "Cloning OpenWrt repository..."
@@ -230,18 +235,20 @@ build_full() {
   ./scripts/feeds update -a
   ./scripts/feeds install -a
   
-  if [ -f "../../.config" ]; then
-    log "Copying .config..."
-    cp ../../.config .config
+  # FIXED: Better .config handling
+  if [ -f "$REPO_ROOT/.config" ]; then
+    log "Copying .config from repository root..."
+    cp "$REPO_ROOT/.config" .config
   else
-    die "No .config file found"
+    die "No .config file found in repository root"
   fi
   
+  log "Expanding config..."
   make defconfig
   
   log "Copying overlay files..."
   rm -rf files
-  cp -r ../../files . || die "Failed to copy files"
+  cp -r "$REPO_ROOT/files" . || die "Failed to copy files"
   
   chmod +x files/usr/sbin/fm350-manager
   chmod +x files/usr/lib/fm350/functions.sh
@@ -265,7 +272,7 @@ build_full() {
 ################################################################################
 
 log "=========================================="
-log "FM350-GL One-Click Builder v22.1"
+log "FM350-GL One-Click Builder v22.1-FIXED"
 log "=========================================="
 echo
 
@@ -288,9 +295,14 @@ log "Profile: $PROFILE"
 [ -n "$EXTRA_PKGS" ] && log "Extra packages: $EXTRA_PKGS"
 echo
 
-if [ ! -f "files/usr/sbin/fm350-manager" ]; then
-  log "Repository not found, cloning..."
-  clone_repo
+# Check if we're in the repo
+if [ ! -f "../files/usr/sbin/fm350-manager" ] && [ ! -f "files/usr/sbin/fm350-manager" ]; then
+  log "Not in repository directory, attempting to find it..."
+  if [ -n "$REPO_URL" ]; then
+    clone_repo
+  else
+    die "Cannot find repository. Please run from repo directory or set REPO_URL"
+  fi
 fi
 
 install_deps
