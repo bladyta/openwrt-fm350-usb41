@@ -1,7 +1,7 @@
 #!/bin/sh
 # FM350-GL Local Image Builder Script
-# POSIX compliant
-# v22.1-FIXED
+# POSIX compliant - PRODUCTION READY
+# v22.1-STABLE
 
 set -eu
 
@@ -38,24 +38,54 @@ die() {
   exit 1
 }
 
+check_deps() {
+  log "Checking dependencies..."
+  
+  local missing=""
+  for cmd in wget tar make; do
+    if ! command -v "$cmd" >/dev/null 2>&1; then
+      missing="$missing $cmd"
+    fi
+  done
+  
+  if [ -n "$missing" ]; then
+    log "Missing dependencies:$missing"
+    log "Installing..."
+    
+    if command -v apt-get >/dev/null 2>&1; then
+      sudo apt-get update
+      sudo apt-get install -y wget tar make
+    else
+      die "Please install:$missing"
+    fi
+  fi
+  
+  log "✓ All dependencies present"
+}
+
 ################################################################################
 # MAIN
 ################################################################################
 
-log "FM350-GL Image Builder v22.1-FIXED"
+log "=========================================="
+log "FM350-GL Image Builder v22.1-STABLE"
+log "=========================================="
 log "OpenWrt: $OPENWRT_VERSION"
 log "Target: $BOARD/$SUBTARGET"
 log "Profile: $PROFILE"
 echo
 
-command -v wget >/dev/null 2>&1 || die "wget not found"
-command -v tar >/dev/null 2>&1 || die "tar not found"
-command -v make >/dev/null 2>&1 || die "make not found"
+check_deps
 
 SCRIPT_DIR=$(cd "$(dirname "$0")" && pwd)
 REPO_ROOT=$(cd "$SCRIPT_DIR/.." && pwd)
 
 log "Repository root: $REPO_ROOT"
+
+# Verify repo structure
+if [ ! -d "$REPO_ROOT/files" ]; then
+  die "Repository structure invalid - missing files/ directory"
+fi
 
 BUILD_DIR="$REPO_ROOT/build-output"
 mkdir -p "$BUILD_DIR"
@@ -68,14 +98,14 @@ if [ ! -f "$IB_FILE" ]; then
   log "Downloading Image Builder..."
   wget -q --show-progress "$IB_URL" || die "Failed to download Image Builder"
 else
-  log "Image Builder already downloaded"
+  log "✓ Image Builder already downloaded"
 fi
 
 if [ ! -d "$IB_DIR" ]; then
   log "Extracting Image Builder..."
   tar -Jxf "$IB_FILE" || die "Failed to extract Image Builder"
 else
-  log "Image Builder already extracted"
+  log "✓ Image Builder already extracted"
 fi
 
 cd "$IB_DIR"
@@ -84,16 +114,17 @@ log "Copying overlay files..."
 rm -rf files
 cp -r "$REPO_ROOT/files" . || die "Failed to copy files"
 
-chmod +x files/usr/sbin/fm350-manager
-chmod +x files/usr/lib/fm350/functions.sh
-chmod +x files/lib/netifd/proto/fm350.sh
-chmod +x files/etc/init.d/fm350-manager
-chmod +x files/etc/hotplug.d/usb/*
-chmod +x files/etc/uci-defaults/99-fm350
-chmod +x files/scripts/*.sh
+# Set permissions
+chmod +x files/usr/sbin/fm350-manager 2>/dev/null || true
+chmod +x files/usr/lib/fm350/functions.sh 2>/dev/null || true
+chmod +x files/lib/netifd/proto/fm350.sh 2>/dev/null || true
+chmod +x files/etc/init.d/fm350-manager 2>/dev/null || true
+chmod +x files/etc/hotplug.d/usb/* 2>/dev/null || true
+chmod +x files/etc/uci-defaults/99-fm350 2>/dev/null || true
+chmod +x files/scripts/*.sh 2>/dev/null || true
 
 log "Building image..."
-log "Packages: $PACKAGES_ALL"
+log "Packages: $(echo "$PACKAGES_ALL" | wc -w) total"
 echo
 
 make image \
@@ -103,13 +134,22 @@ make image \
   || die "Build failed"
 
 echo
-log "Build complete!"
-log "Artifacts location: $BUILD_DIR/$IB_DIR/bin/targets/$BOARD/$SUBTARGET/"
+log "=========================================="
+log "✓ BUILD COMPLETE!"
+log "=========================================="
 echo
 
-ls -lh "bin/targets/$BOARD/$SUBTARGET/"/*.img.gz "bin/targets/$BOARD/$SUBTARGET/"/*.tar.gz 2>/dev/null || true
+OUTPUT_DIR="bin/targets/$BOARD/$SUBTARGET"
+log "Build artifacts:"
+ls -lh "$OUTPUT_DIR"/*.img.gz "$OUTPUT_DIR"/*.tar.gz 2>/dev/null || true
 
 echo
-log "Flash image to device:"
-log "  dd if=openwrt-*-generic-ext4-combined.img.gz of=/dev/sdX bs=4M status=progress"
-log "  # or use web upgrade: openwrt-*-generic-squashfs-combined.img.gz"
+log "Artifacts location:"
+log "  $BUILD_DIR/$IB_DIR/$OUTPUT_DIR/"
+echo
+log "Flash to device:"
+log "  gunzip openwrt-*-ext4-combined.img.gz"
+log "  dd if=openwrt-*-ext4-combined.img of=/dev/sdX bs=4M status=progress"
+echo
+log "Download to local machine:"
+log "  scp root@vps:$BUILD_DIR/$IB_DIR/$OUTPUT_DIR/*.img.gz ."
