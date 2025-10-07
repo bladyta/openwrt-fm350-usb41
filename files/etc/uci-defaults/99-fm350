@@ -2,7 +2,7 @@
 # FM350-GL UCI Defaults Setup
 # Runs once on first boot
 
-# Enable service
+# Enable service autostart
 /etc/init.d/fm350-manager enable
 
 # Create network interface if not exists
