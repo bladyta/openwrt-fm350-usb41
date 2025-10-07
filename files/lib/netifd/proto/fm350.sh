@@ -24,7 +24,6 @@ proto_fm350_setup() {
   
   json_get_vars apn metric dns1 dns2
   
-  # Wait for manager to create interface info
   local timeout=60 rndis_if
   
   logger -t fm350-proto -p daemon.info "Setting up interface $interface"
@@ -36,7 +35,6 @@ proto_fm350_setup() {
       if [ -n "$rndis_if" ] && [ -d "/sys/class/net/$rndis_if" ]; then
         logger -t fm350-proto -p daemon.info "Found RNDIS interface: $rndis_if"
         
-        # Report interface to netifd
         proto_init_update "$rndis_if" 1
         proto_send_update "$interface"
         
