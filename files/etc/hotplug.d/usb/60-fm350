@@ -2,32 +2,29 @@
 # FM350-GL Manager Watchdog Hotplug Script
 # POSIX/ash compliant
 
-. /usr/lib/fm350/functions.sh
-
-# Filter: only bind/add actions for FM350
-[ "$ACTION" = "add" ] || [ "$ACTION" = "bind" ] || exit 0
-
-# Match FM350 VID:PID
-echo "$PRODUCT" | grep -qE '^e8d/(7127|7126|7125)/' || exit 0
-
-# Rate limiting
-STAMP_FILE="/tmp/fm350-hotplug-watchdog.stamp"
-mkdir -p /tmp
-
-if [ -f "$STAMP_FILE" ]; then
-  LAST=$(cat "$STAMP_FILE" 2>/dev/null)
-  NOW=$(date +%s)
-  
-  if [ -n "$LAST" ] && [ $((NOW - LAST)) -lt 60 ]; then
-    exit 0
-  fi
+# Rate limit >= 60s
+stamp="/tmp/fm350.watchdog.stamp"
+now=$(date +%s)
+if [ -f "$stamp" ]; then
+  last=$(cat "$stamp" 2>/dev/null)
+  [ -n "$last" ] && [ $((now - last)) -lt 60 ] && exit 0
 fi
+echo "$now" > "$stamp"
 
-date +%s > "$STAMP_FILE"
+# Filter: only add/bind actions for FM350
+case "$ACTION" in
+  add|bind)
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+
+echo "$PRODUCT" | grep -qE '^e8d/712[567]/.*' || exit 0
 
 # Check if manager is running
 if ! pidof fm350-manager >/dev/null 2>&1; then
-  log_limited warn "Hotplug: Manager not running, restarting service"
+  logger -t fm350 -p daemon.warn "Manager not running, restarting service (one-time)"
   /etc/init.d/fm350-manager restart
 fi
 
