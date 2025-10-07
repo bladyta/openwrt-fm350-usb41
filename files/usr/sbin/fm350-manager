@@ -2,7 +2,7 @@
 # FM350-GL USB41 Connection Manager
 # POSIX/ash compliant - NO bashisms
 # OpenWrt 24.10.x / kernel 6.6
-# VERSION: 21.1-ULTIMATE (All optimizations applied)
+# VERSION: 22.1 (Master Prompt validated)
 
 set -e
 umask 077
@@ -14,22 +14,12 @@ umask 077
 # CONFIGURATION
 ################################################################################
 
-# Read UCI config
 load_config() {
   APN=$(uci get fm350.global.apn 2>/dev/null || echo "internet")
-  
-  # Validate APN (must be 1-100 chars, alphanumeric + basic punctuation)
-  if [ -z "$APN" ] || [ ${#APN} -lt 1 ] || [ ${#APN} -gt 100 ]; then
-    log_limited warn "Invalid APN length '$APN', using default 'internet'"
-    APN="internet"
-  fi
-  
   METRIC=$(uci get fm350.global.metric 2>/dev/null || echo "50")
   DNS1=$(uci get fm350.global.dns1 2>/dev/null || echo "8.8.8.8")
   DNS2=$(uci get fm350.global.dns2 2>/dev/null || echo "8.8.4.4")
-  IPV6_ENABLE=$(uci get fm350.global.ipv6_enable 2>/dev/null || echo "0")
   RECOVERY_MAX=$(uci get fm350.global.recovery_max 2>/dev/null || echo "3")
-  RECOVERY_COOLDOWN=$(uci get fm350.global.recovery_cooldown 2>/dev/null || echo "1800")
   
   log_limited info "Config loaded: APN=$APN, METRIC=$METRIC, DNS=$DNS1/$DNS2"
 }
@@ -43,9 +33,7 @@ AT_PORT=""
 RNDIS_IF=""
 RECOVERY_COUNT=0
 
-# Main state machine loop
 main_loop() {
-  # Create and secure runtime directory
   mkdir -p /tmp/fm350
   chmod 700 /tmp/fm350
   
@@ -90,19 +78,13 @@ state_init() {
   
   log_limited info "Initializing FM350-GL manager"
   
-  # Create runtime directory
   mkdir -p /tmp/fm350
   chmod 700 /tmp/fm350
   
-  # Load kernel modules
   modprobe option 2>/dev/null || true
   modprobe rndis_host 2>/dev/null || true
   sleep 2
   
-  # Register USB IDs
-  register_usb_ids
-  
-  # Wait for dual endpoints
   log_limited info "Waiting for AT port and RNDIS interface..."
   
   if wait_for_dual_endpoints 30; then
@@ -110,7 +92,6 @@ state_init() {
     RNDIS_IF=$(cat /tmp/fm350/rndis_if 2>/dev/null)
     
     log_limited info "Endpoints ready: AT=$AT_PORT, RNDIS=$RNDIS_IF"
-    
     STATE="USB_MODE"
   else
     log_limited err "Failed to detect dual endpoints, retrying in 10s"
@@ -127,19 +108,16 @@ state_usb_mode() {
   
   local current_mode response
   
-  # Validate AT port
   if [ -z "$AT_PORT" ] || [ ! -c "$AT_PORT" ]; then
     log_limited err "AT port invalid or missing"
     STATE="INIT"
     return
   fi
   
-  # Query current USB mode
   response=$(at_command "$AT_PORT" "AT+GTUSBMODE?" 5)
   
   if echo "$response" | grep -q "OK"; then
     current_mode=$(echo "$response" | grep "+GTUSBMODE:" | cut -d' ' -f2)
-    
     log_limited info "Current USB mode: $current_mode"
     
     if [ "$current_mode" != "41" ]; then
@@ -147,16 +125,12 @@ state_usb_mode() {
       
       if at_command "$AT_PORT" "AT+GTUSBMODE=41" 5 | grep -q "OK"; then
         log_limited info "USB mode set to 41, rebooting modem..."
-        
         at_command "$AT_PORT" "AT+CFUN=1,1" 5 || true
-        
         sleep 5
         
-        # Re-detect endpoints after reboot
         if wait_for_dual_endpoints 30; then
           AT_PORT=$(cat /tmp/fm350/at_port 2>/dev/null)
           RNDIS_IF=$(cat /tmp/fm350/rndis_if 2>/dev/null)
-          
           log_limited info "Endpoints re-detected: AT=$AT_PORT, RNDIS=$RNDIS_IF"
         else
           log_limited err "Failed to re-detect endpoints after mode switch"
@@ -186,7 +160,6 @@ state_wait_iface() {
   
   local timeout=30
   
-  # Validate interface name
   if [ -z "$RNDIS_IF" ]; then
     log_limited err "RNDIS interface name empty"
     STATE="INIT"
@@ -199,7 +172,6 @@ state_wait_iface() {
       STATE="CONFIGURE"
       return
     fi
-    
     sleep 1
     timeout=$((timeout - 1))
   done
@@ -215,14 +187,13 @@ state_wait_iface() {
 state_configure() {
   transition_state "CONFIGURE"
   
-  # Validate AT port
   if [ -z "$AT_PORT" ] || [ ! -c "$AT_PORT" ]; then
     log_limited err "AT port invalid or missing"
     STATE="INIT"
     return
   fi
   
-  # Enable modem full functionality
+  # Enable modem
   if ! at_command "$AT_PORT" "AT+CFUN=1" 5 | grep -q "OK"; then
     log_limited err "Failed to enable modem functionality"
     STATE="RECOVERY"
@@ -231,9 +202,29 @@ state_configure() {
   
   sleep 2
   
-  # Validate SIM ready
-  if ! validate_modem_ready "$AT_PORT"; then
-    log_limited err "Modem not ready (SIM issue)"
+  # Check SIM (max 10 retries)
+  local retries=10
+  while [ $retries -gt 0 ]; do
+    local response
+    response=$(at_command "$AT_PORT" "AT+CPIN?" 3)
+    
+    if echo "$response" | grep -q "READY"; then
+      log_limited info "SIM ready"
+      break
+    fi
+    
+    if echo "$response" | grep -q "SIM PIN"; then
+      log_limited err "SIM PIN required"
+      STATE="RECOVERY"
+      return
+    fi
+    
+    sleep 2
+    retries=$((retries - 1))
+  done
+  
+  if [ $retries -eq 0 ]; then
+    log_limited err "SIM not ready after 10 attempts"
     STATE="RECOVERY"
     return
   fi
@@ -249,26 +240,11 @@ state_configure() {
   
   sleep 1
   
-  # Activate PDP context (with retry)
-  local retries=3
-  while [ $retries -gt 0 ]; do
-    if at_command "$AT_PORT" "AT+CGACT=1,1" 10 | grep -q "OK"; then
-      log_limited info "PDP context activated"
-      STATE="CONNECT"
-      return
-    fi
-    
-    log_limited warn "PDP activation failed, retrying ($retries attempts left)"
-    sleep 2
-    retries=$((retries - 1))
-  done
-  
-  log_limited err "Failed to activate PDP context after 3 attempts"
-  STATE="RECOVERY"
+  STATE="CONNECT"
 }
 
 ################################################################################
-# STATE: CONNECT
+# STATE: CONNECT (v22.1: CGACT before DHCP)
 ################################################################################
 
 state_connect() {
@@ -276,24 +252,30 @@ state_connect() {
   
   local ip dhcp_success=0
   
-  # Validate interface exists
   if [ -z "$RNDIS_IF" ] || [ ! -d "/sys/class/net/$RNDIS_IF" ]; then
     log_limited err "RNDIS interface invalid or missing"
     STATE="INIT"
     return
   fi
   
-  # Bring interface up
+  # 1. Bring interface up
   ip link set "$RNDIS_IF" up 2>/dev/null || true
   sleep 2
   
-  # Try DHCP first
+  # 2. Activate PDP context (v22.1: BEFORE DHCP)
+  log_limited info "Activating PDP context..."
+  if ! at_command "$AT_PORT" "AT+CGACT=1,1" 30 | grep -q "OK"; then
+    log_limited warn "PDP activation failed or timeout"
+  fi
+  
+  sleep 2
+  
+  # 3. Try DHCP first
   log_limited info "Attempting DHCP on $RNDIS_IF..."
   
   if udhcpc -i "$RNDIS_IF" -t 5 -T 6 -n -q 2>/dev/null; then
     log_limited info "DHCP client succeeded on $RNDIS_IF"
     
-    # Poll for IP assignment (optimized - max 5s with 1s intervals)
     local wait=0
     while [ $wait -lt 5 ]; do
       ip=$(ip -4 addr show dev "$RNDIS_IF" 2>/dev/null | grep inet | awk '{print $2}' | cut -d'/' -f1)
@@ -308,23 +290,17 @@ state_connect() {
       sleep 1
       wait=$((wait + 1))
     done
-    
-    if [ $dhcp_success -eq 0 ]; then
-      log_limited warn "DHCP succeeded but IP not assigned after 5s, using fallback"
-    fi
   else
     log_limited warn "DHCP failed, using fallback method"
   fi
   
-  # Fallback if DHCP didn't work
+  # 4. Fallback if DHCP didn't work
   if [ $dhcp_success -eq 0 ]; then
-    # Get IP from modem
     ip=$(get_pdp_ipv4 "$AT_PORT")
     
     if [ -n "$ip" ]; then
       log_limited info "Got IP from modem: $ip"
       
-      # Apply /32 address
       if apply_ipv4_addr "$RNDIS_IF" "$ip"; then
         log_limited info "Applied fallback IP: $ip/32"
         echo "$ip" > /tmp/fm350/ip4
@@ -340,18 +316,19 @@ state_connect() {
     fi
   fi
   
-  # Setup device route (always, even with DHCP)
+  # 5. Setup device route (ALWAYS)
   setup_fallback_route "$RNDIS_IF" "$METRIC"
   log_limited info "Device route configured (metric $METRIC)"
   
-  # Configure DNS via UCI
+  # 6. Configure DNS via UCI
   setup_dns_uci "$DNS1" "$DNS2"
   log_limited info "DNS configured: $DNS1, $DNS2"
   
-  # Warn if USB3 detected
-  warn_if_usb3 "$RNDIS_IF"
+  # 7. Save signal quality
+  rssi=$(get_signal_quality "$AT_PORT" 2>/dev/null || echo "unknown")
+  echo "$rssi" > /tmp/fm350/signal
   
-  # Test connectivity
+  # 8. Test connectivity
   if ping -I "$RNDIS_IF" -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
     log_limited info "Connectivity test passed"
     RECOVERY_COUNT=0
@@ -371,7 +348,6 @@ state_monitor() {
   
   local failures=0 rssi
   
-  # Validate interface exists
   if [ -z "$RNDIS_IF" ] || [ ! -d "/sys/class/net/$RNDIS_IF" ]; then
     log_limited err "RNDIS interface disappeared during monitoring"
     STATE="RECOVERY"
@@ -379,14 +355,10 @@ state_monitor() {
   fi
   
   while [ "$STATE" = "MONITOR" ]; do
-    # Connectivity check
     if ping -I "$RNDIS_IF" -c 1 -W 5 8.8.8.8 >/dev/null 2>&1; then
       failures=0
-      
-      # Update signal strength
       rssi=$(get_signal_quality "$AT_PORT" 2>/dev/null || echo "unknown")
       echo "$rssi" > /tmp/fm350/signal
-      
     else
       failures=$((failures + 1))
       log_limited warn "Connectivity check failed ($failures/3)"
@@ -398,9 +370,7 @@ state_monitor() {
       fi
     fi
     
-    # Cap failures to prevent overflow in long outages
     [ $failures -gt 100 ] && failures=100
-    
     sleep 30
   done
 }
@@ -424,14 +394,13 @@ state_recovery() {
     return
   fi
   
-  # Validate AT port before recovery
   if [ -z "$AT_PORT" ] || [ ! -c "$AT_PORT" ]; then
     log_limited err "AT port lost, restarting from INIT"
     STATE="INIT"
     return
   fi
   
-  # Recovery Level 1: Soft context reset
+  # Recovery L1: Soft PDP reset (no budget consumption)
   log_limited info "Recovery L1: Soft PDP reset"
   
   at_command "$AT_PORT" "AT+CGACT=0,1" 5 || true
@@ -443,7 +412,7 @@ state_recovery() {
     return
   fi
   
-  # Recovery Level 2: Modem soft reset
+  # Recovery L2: Modem soft reset (budget 2/h, cooldown 1800s)
   if check_recovery_cooldown "L2" && check_recovery_budget "L2"; then
     log_limited info "Recovery L2: Modem soft reset"
     
@@ -454,7 +423,6 @@ state_recovery() {
     if wait_for_dual_endpoints 30; then
       AT_PORT=$(cat /tmp/fm350/at_port 2>/dev/null)
       RNDIS_IF=$(cat /tmp/fm350/rndis_if 2>/dev/null)
-      
       log_limited info "L2 recovery successful"
       STATE="USB_MODE"
       return
@@ -463,7 +431,7 @@ state_recovery() {
     log_limited warn "L2 recovery skipped (cooldown/budget)"
   fi
   
-  # Recovery Level 3: USB reset
+  # Recovery L3: USB reset (budget 2/h, cooldown 1800s)
   if check_recovery_cooldown "L3" && check_recovery_budget "L3"; then
     log_limited info "Recovery L3: USB reset"
     
@@ -473,7 +441,6 @@ state_recovery() {
       if wait_for_dual_endpoints 30; then
         AT_PORT=$(cat /tmp/fm350/at_port 2>/dev/null)
         RNDIS_IF=$(cat /tmp/fm350/rndis_if 2>/dev/null)
-        
         log_limited info "L3 recovery successful"
         STATE="INIT"
         return
@@ -494,12 +461,9 @@ state_recovery() {
 
 cleanup() {
   log_limited info "Shutting down FM350 manager"
-  
-  # Deactivate PDP if possible
   if [ -n "$AT_PORT" ] && [ -c "$AT_PORT" ]; then
     at_command "$AT_PORT" "AT+CGACT=0,1" 5 || true
   fi
-  
   exit 0
 }
 
@@ -509,7 +473,7 @@ trap cleanup INT TERM
 # MAIN
 ################################################################################
 
-log_limited info "FM350-GL Manager v21.1-ULTIMATE starting"
+log_limited info "FM350-GL Manager v22.1 starting"
 
 load_config
 
