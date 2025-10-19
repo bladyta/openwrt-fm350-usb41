@@ -1,3 +1,9 @@
+[![Release](https://img.shields.io/github/v/release/bladyta/openwrt-fm350-usb41?style=flat-square)](https://github.com/bladyta/openwrt-fm350-usb41/releases)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
+[![OpenWrt](https://img.shields.io/badge/OpenWrt-24.10-blue?style=flat-square)](https://openwrt.org/)
+```
+
+
 # OpenWrt FM350-GL USB41 — Full Integration v22.1
 
 **Comprehensive OpenWrt 24.10.x integration for Fibocom FM350-GL 5G modem in USB mode 41 (RNDIS + AT).**
